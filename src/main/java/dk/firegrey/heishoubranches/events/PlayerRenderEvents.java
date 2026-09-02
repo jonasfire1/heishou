@@ -17,9 +17,10 @@ public class PlayerRenderEvents {
         if (!(ProvenanceManager.get(event.getEntity()) instanceof Wu)) {
             return;
         }
+        event.getPoseStack().translate(0D,0D,0.25D);
+
 
         PlayerModel<AbstractClientPlayer> model = event.getRenderer().getModel();
-
         model.leftLeg.visible = false;
         model.rightLeg.visible = false;
     }
