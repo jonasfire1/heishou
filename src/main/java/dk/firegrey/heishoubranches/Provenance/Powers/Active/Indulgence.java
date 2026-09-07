@@ -1,70 +1,57 @@
 package dk.firegrey.heishoubranches.Provenance.Powers.Active;
 
 import dk.firegrey.heishoubranches.Provenance.Powers.abstraction.ActivePower;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 public class Indulgence extends ActivePower {
     public int duration = 0;
     final int maxcooldown = 2400;
-    private static final ResourceLocation MODIFIER_ID_SPEED = ResourceLocation.fromNamespaceAndPath("heishoubranches", "indulgence_speed");
-    private static final ResourceLocation MODIFIER_ID_ATTACKSPEED = ResourceLocation.fromNamespaceAndPath("heishoubranches", "indulgence_attacjspeed");
+    int swings = 0;
     @Override
     public void activate(Player player) {
         if (!canActivate(player)) {
             return;
         }
-        duration = 400;
-        cooldown = maxcooldown;
-        AttributeInstance attribute = player.getAttribute(Attributes.MOVEMENT_SPEED);
-
-        if (attribute != null) {
-            AttributeModifier modifier = attribute.getModifier(MODIFIER_ID_SPEED);
-
-            if (modifier == null || modifier.amount() != 0.2) {
-                if (modifier != null) {
-                    attribute.removeModifier(MODIFIER_ID_SPEED);
-                }
-
-                attribute.addPermanentModifier(
-                        new AttributeModifier(
-                                MODIFIER_ID_SPEED,
-                                0.2,
-                                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
-                        )
-                );
-            }
+        LivingEntity target = raycastLivingEntity(player);
+        if (target == null) {
+            return;
         }
-        attribute = player.getAttribute(Attributes.ATTACK_SPEED);
-
-        if (attribute != null) {
-            AttributeModifier modifier = attribute.getModifier(MODIFIER_ID_ATTACKSPEED);
-
-            if (modifier == null || modifier.amount() != 0.2) {
-                if (modifier != null) {
-                    attribute.removeModifier(MODIFIER_ID_ATTACKSPEED);
-                }
-
-                attribute.addPermanentModifier(
-                        new AttributeModifier(
-                                MODIFIER_ID_ATTACKSPEED,
-                                0.2,
-                                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
-                        )
-                );
-            }
+        if (cooldown <= 0) {
+            swings = 9;
         }
+        if (duration <= 0) {
+            duration = 400;
+            cooldown = maxcooldown;
+        }
+        Vec3 facing = target.getViewVector(1.0F);
+        Vec3 horizontalFacing = new Vec3(facing.x, 0.0D, facing.z).normalize();
+        Vec3 behind = target.getBoundingBox().getCenter()
+                .subtract(horizontalFacing.scale(2.0D));
+        player.teleportTo(behind.x, behind.y, behind.z);
+        player.lookAt(EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+        player.resetAttackStrengthTicker();
+        player.swing(InteractionHand.MAIN_HAND);
+        player.attack(target);
     }
 
     @Override
     public boolean canActivate(Player player) {
-        return cooldown <= 0 && duration <= 0;
+        return cooldown <= 0 | swings > 0;
     }
 
     @Override
@@ -92,17 +79,9 @@ public class Indulgence extends ActivePower {
         cooldown--;
         if (duration > 0) {
             duration--;
-            if (duration == 0) {
-                AttributeInstance attribute = player.getAttribute(Attributes.MOVEMENT_SPEED);
-
-                if (attribute != null) {
-                    attribute.removeModifier(MODIFIER_ID_SPEED);
-                }
-                attribute = player.getAttribute((Attributes.ATTACK_SPEED));
-                if (attribute != null) {
-                    attribute.removeModifier(MODIFIER_ID_SPEED);
-                }
-            }
+        }
+        if (duration <= 0) {
+            swings = 0;
         }
     }
 
@@ -114,14 +93,35 @@ public class Indulgence extends ActivePower {
         }
     }
 
-    @Override
-    public void onHit(LivingEntity attacker, LivingEntity victim) {
-        if (duration > 0) {
-            victim.addEffect(new MobEffectInstance(
-                    MobEffects.MOVEMENT_SLOWDOWN,
-                    20, // 1 seconds (20 ticks/sec)
-                    0
-            ));// Slowness I)
+    private LivingEntity raycastLivingEntity(Player player) {
+        double range = 6.0D;
+        Vec3 start = player.getEyePosition();
+        Vec3 end = start.add(player.getViewVector(1.0F).scale(range));
+
+        var blockHit = player.level().clip(new ClipContext(
+                start, end,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
+                player
+        ));
+
+        if (blockHit.getType() != HitResult.Type.MISS) {
+            end = blockHit.getLocation();
         }
+
+        EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(
+                player,
+                start,
+                end,
+                player.getBoundingBox()
+                        .expandTowards(end.subtract(start))
+                        .inflate(1.0D),
+                entity -> entity instanceof LivingEntity && entity != player,
+                start.distanceToSqr(end)
+        );
+
+        return entityHit != null && entityHit.getEntity() instanceof LivingEntity living
+                ? living
+                : null;
     }
 }
