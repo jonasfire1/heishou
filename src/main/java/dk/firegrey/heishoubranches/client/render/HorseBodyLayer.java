@@ -48,7 +48,7 @@ public class HorseBodyLayer extends RenderLayer<AbstractClientPlayer, PlayerMode
 
         poseStack.pushPose();
 
-        poseStack.translate(0.0D, 0.3D, 0.25D);
+        poseStack.translate(0.0D, 0.3D, 0.5D);
         poseStack.scale(0.9F, 0.9F, 0.9F);
 
         horseModel.setupAnim(
